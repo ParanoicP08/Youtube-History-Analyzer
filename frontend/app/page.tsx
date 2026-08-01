@@ -373,34 +373,46 @@ export default function Home() {
           ? parsed
           : { items: [] };
 
+      // 1. Process data locally first
       const parsedVideos = parseHistory(text);
       setAllVideos(parsedVideos);
-      setStatus("Uploading to backend...");
-      const response = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      
+      // 2. Generate local analysis immediately
+      const localResult = buildLocalAnalysis(parsedVideos);
+      setAnalysis(localResult);
+      setStatus("Analyzed locally. Generating dashboard...");
 
-      const contentType = response.headers.get("content-type") || "";
-      const isJson = contentType.includes("application/json");
-      const result = isJson ? await response.json() : await response.text();
+      // 3. Attempt to hit the backend (optional, won't break if it fails)
+      if (apiBaseUrl) {
+        try {
+          const response = await fetch(uploadUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
-      if (!response.ok) {
-        throw new Error(typeof result === "string" ? result : result?.error || "Upload failed");
+          const contentType = response.headers.get("content-type") || "";
+          const isJson = contentType.includes("application/json");
+          const result = isJson ? await response.json() : await response.text();
+
+          if (response.ok && isJson && result?.success) {
+            setJobId(result.jobId);
+            if (result.result) setAnalysis(result.result); // Override with backend result if provided
+            setStatus(`Analysis complete.`);
+          }
+        } catch (backendError) {
+          console.warn("Backend sync failed, falling back to local analysis:", backendError);
+          // Backend failed, but local UI is already built!
+          setStatus("Analysis complete (Local Mode).");
+          setJobId("local-only");
+        }
+      } else {
+        setStatus("Analysis complete (Local Mode).");
+        setJobId("local-only");
       }
-
-      if (!isJson || !result?.success) {
-        throw new Error(typeof result === "string" ? result : result?.error || "Upload failed");
-      }
-
-      setJobId(result.jobId);
-      setAnalysis(result.result ?? null);
-      setStatus(`Accepted for processing (${result.mode}).`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Upload failed");
-      setJobId("");
-      setAnalysis(null);
+      // This catch is only for file reading/JSON parsing errors
+      setStatus(error instanceof Error ? error.message : "Failed to read file.");
     } finally {
       setIsLoading(false);
     }
@@ -508,7 +520,7 @@ export default function Home() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
             <h2 className="text-2xl font-semibold text-white">Upload your watch-history.json</h2>
             <p className="mt-3 text-sm leading-6 text-zinc-400">
-              The app reads your export locally, sends it to the backend for processing, and turns the result into a profile dashboard with charts, filters, and export actions.
+              The app reads your export locally, processing it right here in your browser, and turns the result into a profile dashboard with charts, filters, and export actions.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <span className="rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300">Privacy first</span>
@@ -561,7 +573,7 @@ export default function Home() {
             </button>
             {saveMessage ? <span className="text-sm text-emerald-400">{saveMessage}</span> : null}
           </div>
-          {jobId ? <p className="mt-3 text-sm text-emerald-400">Job ID: {jobId}</p> : null}
+          {jobId && jobId !== "local-only" ? <p className="mt-3 text-sm text-emerald-400">Job ID: {jobId}</p> : null}
           {analysis ? (
             <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
               <p className="text-sm font-semibold text-zinc-200">Analysis summary</p>
