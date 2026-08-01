@@ -86,4 +86,6 @@ There are a lot of ways I’d like to grow this project further:
 - deploy it online
 - improve the accuracy of the analysis with better parsing and smarter classification
 
-If you want, I can also help turn this into a more polished GitHub-style README with a screenshot section, architecture diagram, and a cleaner project showcase layout.
+Thank You For Using This!.
+
+
